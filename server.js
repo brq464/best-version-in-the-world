@@ -1,91 +1,89 @@
-
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
-app.use(express.static('public'));
+// تقديم الملفات الثابتة
+app.use(express.static(path.join(__dirname, 'public')));
 
 let online = 0;
 let users = {};
 
-io.on('connection', (socket)=>{
+io.on('connection', (socket) => {
+  online++;
+  io.emit('online', online);
 
-online++;
-io.emit('online', online);
+  socket.on('login', (data) => {
+    const username = data.username;
 
-socket.on('login', (data)=>{
+    if (!users[username]) {
+      users[username] = {
+        money: 500000,
+        job: 'تاجر',
+        loan: 0,
+        level: 1
+      };
+    }
 
-const username = data.username;
+    socket.username = username;
+    socket.emit('userData', users[username]);
+  });
 
-if(!users[username]){
-users[username] = {
-money: 500000,
-job: 'تاجر',
-loan: 0,
-level: 1
-};
-}
+  socket.on('takeLoan', () => {
+    const user = users[socket.username];
 
-socket.username = username;
+    if (!user) return;
 
-io.emit('userData', users[username]);
+    let amount = 0;
 
+    if (user.job === 'عامل') {
+      amount = 10000;
+    } else if (user.job === 'شرطة') {
+      amount = 50000;
+    } else {
+      amount = 100000;
+    }
+
+    user.money += amount;
+    user.loan += amount;
+
+    io.emit('userData', user);
+  });
+
+  socket.on('salary', () => {
+    const user = users[socket.username];
+
+    if (!user) return;
+
+    let salary = 15000;
+
+    if (user.loan > 0) {
+      const cut = Math.min(5000, user.loan);
+      user.loan -= cut;
+      salary -= cut;
+    }
+
+    user.money += salary;
+
+    io.emit('userData', user);
+  });
+
+  socket.on('disconnect', () => {
+    online--;
+    io.emit('online', online);
+  });
 });
 
-socket.on('takeLoan', ()=>{
-
-const user = users[socket.username];
-
-if(!user) return;
-
-let amount = 0;
-
-if(user.job === 'عامل'){
-amount = 10000;
-}else if(user.job === 'شرطة'){
-amount = 50000;
-}else{
-amount = 100000;
-}
-
-user.money += amount;
-user.loan += amount;
-
-io.emit('userData', user);
-
-});
-
-socket.on('salary', ()=>{
-
-const user = users[socket.username];
-
-if(!user) return;
-
-let salary = 15000;
-
-if(user.loan > 0){
-const cut = Math.min(5000, user.loan);
-user.loan -= cut;
-salary -= cut;
-}
-
-user.money += salary;
-
-io.emit('userData', user);
-
-});
-
-socket.on('disconnect', ()=>{
-online--;
-io.emit('online', online);
-});
-
-});
-
-server.listen(process.env.PORT || 3000, ()=>{
-console.log('Server Started');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
